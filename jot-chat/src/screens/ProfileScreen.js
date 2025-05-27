@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   View,
@@ -9,6 +9,7 @@ import {
   ScrollView,
   Switch,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -17,7 +18,8 @@ import Header from '../components/Header';
 const ProfileScreen = ({ navigation }) => {
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
-  const { user, logout } = useApp();
+  const [isSyncing, setIsSyncing] = useState(false);
+  const { user, logout, syncWithCloud, lastSyncTime } = useApp();
   
   // Default user data if not logged in
   const userData = user || {
@@ -135,6 +137,55 @@ const ProfileScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
         
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Cloud Sync</Text>
+          
+          <View style={styles.menuItem}>
+            <Ionicons name="cloud-outline" size={24} color="#075E54" style={styles.menuIcon} />
+            <Text style={styles.menuText}>Auto Sync</Text>
+            <Switch
+              value={true}
+              trackColor={{ false: '#CCCCCC', true: '#128C7E' }}
+              thumbColor={'#075E54'}
+              disabled={true}
+            />
+          </View>
+          
+          <TouchableOpacity 
+            style={[styles.menuItem, styles.lastMenuItem]} 
+            onPress={async () => {
+              if (isSyncing) return;
+              
+              setIsSyncing(true);
+              const result = await syncWithCloud();
+              setIsSyncing(false);
+              
+              if (result.success) {
+                Alert.alert('Success', 'Data synced successfully with cloud.');
+              } else {
+                Alert.alert('Error', result.error || 'Failed to sync data with cloud.');
+              }
+            }}
+            disabled={isSyncing}
+          >
+            <Ionicons name="sync-outline" size={24} color="#075E54" style={styles.menuIcon} />
+            <Text style={styles.menuText}>Sync Now</Text>
+            {isSyncing ? (
+              <ActivityIndicator size="small" color="#075E54" />
+            ) : (
+              <Ionicons name="chevron-forward" size={24} color="#CCCCCC" />
+            )}
+          </TouchableOpacity>
+          
+          {lastSyncTime && (
+            <View style={styles.syncInfoContainer}>
+              <Text style={styles.syncInfoText}>
+                Last synced: {lastSyncTime.toLocaleString()}
+              </Text>
+            </View>
+          )}
+        </View>
+        
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
@@ -212,6 +263,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8F8F8F',
     marginRight: 5,
+  },
+  lastMenuItem: {
+    borderBottomWidth: 0,
+  },
+  syncInfoContainer: {
+    paddingTop: 10,
+    alignItems: 'center',
+  },
+  syncInfoText: {
+    fontSize: 12,
+    color: '#8F8F8F',
   },
   logoutButton: {
     margin: 20,

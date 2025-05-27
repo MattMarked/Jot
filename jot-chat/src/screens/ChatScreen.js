@@ -7,88 +7,62 @@ import {
   Text,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import Header from '../components/Header';
 import Message from '../components/Message';
 import InputBar from '../components/InputBar';
-
-// Mock data for demonstration
-const MOCK_MESSAGES = [
-  {
-    id: '1',
-    text: 'Hey there!',
-    time: '10:00 AM',
-    status: 'read',
-    isOwn: false,
-  },
-  {
-    id: '2',
-    text: 'Hi! How are you?',
-    time: '10:02 AM',
-    status: 'read',
-    isOwn: true,
-  },
-  {
-    id: '3',
-    text: 'I\'m good, thanks for asking. How about you?',
-    time: '10:03 AM',
-    status: 'read',
-    isOwn: false,
-  },
-  {
-    id: '4',
-    text: 'Doing well! Just working on a new project.',
-    time: '10:05 AM',
-    status: 'read',
-    isOwn: true,
-  },
-  {
-    id: '5',
-    text: 'That sounds interesting. What kind of project?',
-    time: '10:06 AM',
-    status: 'read',
-    isOwn: false,
-  },
-  {
-    id: '6',
-    text: 'It\'s a chat application similar to WhatsApp. I\'m building it with React Native.',
-    time: '10:08 AM',
-    status: 'delivered',
-    isOwn: true,
-  },
-];
+import { useApp } from '../context/AppContext';
 
 const ChatScreen = ({ route, navigation }) => {
   const { chat } = route.params;
-  const [messages, setMessages] = useState(MOCK_MESSAGES);
+  const { loadMessages, sendMessage, updateMessageStatus } = useApp();
+  const [messages, setMessages] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const flatListRef = useRef(null);
 
+  // Load messages when component mounts
   useEffect(() => {
-    // Scroll to bottom when component mounts
-    if (flatListRef.current) {
-      setTimeout(() => {
-        flatListRef.current.scrollToEnd({ animated: false });
-      }, 200);
-    }
-  }, []);
-
-  const handleSendMessage = (text) => {
-    const newMessage = {
-      id: String(messages.length + 1),
-      text,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'sent',
-      isOwn: true,
+    const fetchMessages = async () => {
+      setIsLoading(true);
+      const chatMessages = await loadMessages(chat.id);
+      setMessages(chatMessages);
+      setIsLoading(false);
+      
+      // Scroll to bottom when messages are loaded
+      if (flatListRef.current && chatMessages.length > 0) {
+        setTimeout(() => {
+          flatListRef.current.scrollToEnd({ animated: false });
+        }, 200);
+      }
+      
+      // Mark unread messages as read
+      chatMessages.forEach(message => {
+        if (!message.isOwn && message.status !== 'read') {
+          updateMessageStatus(message.id, chat.id, 'read');
+        }
+      });
     };
     
-    setMessages([...messages, newMessage]);
+    fetchMessages();
+  }, [chat.id, loadMessages, updateMessageStatus]);
+
+  // Handle sending a new message
+  const handleSendMessage = async (text) => {
+    if (!text.trim()) return;
     
-    // Scroll to the bottom
-    setTimeout(() => {
-      flatListRef.current.scrollToEnd({ animated: true });
-    }, 100);
+    const result = await sendMessage(chat.id, text);
+    
+    if (result.success) {
+      // Scroll to the bottom
+      setTimeout(() => {
+        if (flatListRef.current) {
+          flatListRef.current.scrollToEnd({ animated: true });
+        }
+      }, 100);
+    }
   };
 
   const renderRightComponent = () => {
@@ -121,15 +95,27 @@ const ChatScreen = ({ route, navigation }) => {
         onBackPress={() => navigation.goBack()}
       />
       
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <Message message={item} isOwn={item.isOwn} />
-        )}
-        contentContainerStyle={styles.messagesList}
-      />
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#075E54" />
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <Message message={item} isOwn={item.isOwn} />
+          )}
+          contentContainerStyle={styles.messagesList}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No messages yet</Text>
+              <Text style={styles.emptySubtext}>Start a conversation!</Text>
+            </View>
+          }
+        />
+      )}
       
       <InputBar onSendMessage={handleSendMessage} />
     </KeyboardAvoidingView>
@@ -149,6 +135,28 @@ const styles = StyleSheet.create({
   },
   messagesList: {
     paddingVertical: 10,
+    flexGrow: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#555',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#888',
   },
 });
 
